@@ -27,24 +27,36 @@ func (iw *IngressWrapper) supportsTLS() bool {
 	return false
 }
 
-func (iw *IngressWrapper) tryGetTLSHost() (string, bool) {
+func (iw *IngressWrapper) getProtocol() string {
 	if iw.supportsTLS() {
-		return "https://" + iw.Ingress.Spec.TLS[0].Hosts[0], true
+		return "https://"
 	}
 
 	annotations := iw.Ingress.GetAnnotations()
 	if value, ok := annotations[constants.ForceHTTPSAnnotation]; ok {
 		if value == "true" {
 			// Annotation exists and is enabled
-			return "https://" + iw.Ingress.Spec.Rules[0].Host, true
+			return "https://"
 		}
 	}
 
-	return "", false
+	// Default to standard http
+	return "http://"
 }
 
+
 func (iw *IngressWrapper) getHost() string {
-	return "http://" + iw.Ingress.Spec.Rules[0].Host
+	annotations := iw.Ingress.GetAnnotations()
+
+	// Determine if TLS is supported
+	protocol := iw.getProtocol()
+
+	// Check if an annotation is set to override the host value
+	if value, ok := annotations[constants.OverrideHostAnnotation]; ok {
+		return protocol + value
+	}
+
+	return protocol + iw.Ingress.Spec.Rules[0].Host
 }
 
 func (iw *IngressWrapper) rulesExist() bool {
@@ -109,11 +121,7 @@ func (iw *IngressWrapper) GetURL() string {
 
 	var URL string
 
-	if host, exists := iw.tryGetTLSHost(); exists { // Get TLS Host if it exists
-		URL = host
-	} else {
-		URL = iw.getHost() // Fallback for normal Host
-	}
+	URL = iw.getHost() // getHost should determine protocol
 
 	// Convert url to url object
 	u, err := url.Parse(URL)
